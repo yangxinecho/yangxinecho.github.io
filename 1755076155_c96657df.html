@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>脑卒中患者智慧管理平台——总览与患者管理</title>
+  <!-- TailwindCSS CDN for rapid, modern styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for simple charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Utilities not covered by Tailwind */
+    .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+    .card { @apply bg-white rounded-2xl shadow-sm ring-1 ring-slate-200; }
+    .btn { @apply inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium ring-1 ring-inset; }
+    .btn-primary { @apply bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-500; }
+    .btn-soft { @apply bg-slate-50 text-slate-700 ring-slate-200 hover:bg-slate-100; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .progress { @apply w-full h-2 rounded-full bg-slate-100 overflow-hidden; }
+    .progress-bar { @apply h-2; }
+    .mask-gradient { mask-image: linear-gradient(90deg, transparent, black 24px, black calc(100% - 24px), transparent); }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <!-- App Shell -->
+  <div class="mx-auto max-w-[1280px] px-4 py-6">
+    <!-- Header -->
+    <header class="mb-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-indigo-600 text-white grid place-items-center font-bold">NS</div>
+        <h1 class="text-xl md:text-2xl font-semibold">脑卒中患者智慧管理平台——总览与患者管理</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-soft" id="btnToOverview">总览</button>
+        <button class="btn btn-primary" id="btnToPatients">患者管理</button>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-12 gap-6">
+      <!-- Left Floating: 今日重点关注 -->
+      <aside class="col-span-12 lg:col-span-3">
+        <div class="card sticky top-4 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">今日重点关注</h2>
+            <span class="text-xs text-slate-500">共 <span id="focusCount">8</span> 人</span>
+          </div>
+          <ul id="focusList" class="space-y-2 text-sm"></ul>
+          <p class="mt-3 text-xs text-slate-500">可点击头像或姓名查看详情。</p>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="col-span-12 lg:col-span-9 space-y-6">
+        <!-- 1) 核心数据总览板块 -->
+        <section class="space-y-4" id="sectionOverview">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="card p-4">
+              <div class="text-sm text-slate-500">当日活跃患者</div>
+              <div class="mt-2 flex items-end gap-2">
+                <div class="text-2xl font-semibold" id="metricActive">—</div>
+                <div class="text-sm text-slate-500">/ <span id="metricTotal">—</span> 人</div>
+              </div>
+              <div class="mt-3 flex items-center gap-2 text-xs text-slate-600">
+                <span class="status-dot" style="background:#16a34a"></span>在线
+                <span class="status-dot" style="background:#94a3b8"></span>离线
+              </div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm text-slate-500">整体打卡完成率</div>
+              <div class="mt-2 text-2xl font-semibold" id="metricCheckin">—</div>
+              <div class="mt-3 progress" title="完成率">
+                <div id="progressCheckin" class="progress-bar bg-indigo-500" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm text-slate-500">预警事件</div>
+              <div class="mt-2 flex items-center gap-3">
+                <div class="flex items-center gap-1 text-rose-600"><span class="status-dot" style="background:#dc2626"></span><span class="text-xl font-semibold" id="alertRed">—</span><span class="text-xs">红</span></div>
+                <div class="flex items-center gap-1 text-amber-600"><span class="status-dot" style="background:#d97706"></span><span class="text-xl font-semibold" id="alertYellow">—</span><span class="text-xs">黄</span></div>
+              </div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center justify-between">
+                <div class="text-sm text-slate-500">本周康复达标率趋势</div>
+                <div class="text-xs text-slate-400" id="trendWeek">—</div>
+              </div>
+              <div class="mt-2">
+                <canvas id="weeklyChart" height="110"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2) 患者列表与打卡状态板块 -->
+        <section class="space-y-3" id="sectionPatients">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold">患者列表与打卡状态</h2>
+            <div class="flex items-center gap-2">
+              <input id="searchInput" type="search" placeholder="搜索患者姓名…" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <select id="filterType" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="">全部类型</option>
+                <option>缺血性脑梗</option>
+                <option>出血性脑卒中</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <table class="min-w-full divide-y divide-slate-200">
+              <thead class="bg-slate-50 text-left text-xs font-medium text-slate-500">
+                <tr>
+                  <th class="px-4 py-2">基础信息</th>
+                  <th class="px-4 py-2">当日打卡进度</th>
+                  <th class="px-4 py-2">最后打卡</th>
+                  <th class="px-4 py-2">异常标识</th>
+                </tr>
+              </thead>
+              <tbody id="patientTable" class="divide-y divide-slate-100 bg-white text-sm"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 3) 患者详情与跟进记录（单页内路由） -->
+        <section id="sectionDetail" class="hidden">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 id="detailName" class="font-semibold text-lg">患者详情</h2>
+              <p id="detailSub" class="text-xs text-slate-500">—</p>
+            </div>
+            <button class="btn btn-soft" id="btnBack">← 返回列表</button>
+          </div>
+
+          <div class="grid grid-cols-12 gap-6">
+            <!-- 左：康复计划日历 -->
+            <div class="col-span-12 lg:col-span-5">
+              <div class="card p-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="font-medium">康复计划日历</h3>
+                  <div class="flex items-center gap-2 text-sm">
+                    <button class="btn btn-soft" data-view="week">周视图</button>
+                    <button class="btn btn-soft" data-view="month">月视图</button>
+                  </div>
+                </div>
+                <div class="mt-4 grid grid-cols-7 gap-2 text-center" id="calendarGrid"></div>
+                <p class="mt-3 text-xs text-slate-500">已完成标 <span class="text-green-600">绿</span> 并显示完成率，未完成标 <span class="text-rose-600">红</span>。</p>
+              </div>
+            </div>
+
+            <!-- 右：10个小项 -->
+            <div class="col-span-12 lg:col-span-7">
+              <div class="card divide-y divide-slate-100">
+                <details class="group p-4" open>
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">动脉穿刺点压迫观察</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="flex items-center gap-3">
+                      <label class="shrink-0">实时监测压迫点有无渗血渗液：</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="bleed" value="否" checked> 否</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="bleed" value="是"> 是</label>
+                      <input id="bleedTime" type="datetime-local" class="ml-auto hidden rounded-lg border border-slate-200 px-2 py-1" />
+                      <span id="bleedWarn" class="hidden text-rose-600 text-sm">红色预警</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <label class="shrink-0">监测压迫侧肢体皮肤温度：</label>
+                      <input id="skinTemp" type="number" step="0.1" placeholder="℃" class="w-28 rounded-lg border border-slate-200 px-2 py-1" />
+                      <span id="tempWarn" class="text-amber-600 hidden">温度异常，预警</span>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">住院期间康复打卡明细</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-5 text-sm">
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="flex items-center justify-between">
+                        <div class="font-medium"> 踝泵运动_(打卡图/参照图)</div>
+                        <button class="btn btn-soft">查看视频</button>
+                      </div>
+                      <p class="mt-1 text-slate-600">达标率 <b>72%</b>　心率 <b>77–87</b>bpm　血压 <b>130/80</b>、<b>133/82</b>mmHg</p>
+                      <div class="mt-2 grid grid-cols-2 gap-3">
+                        
+<div class="aspect-video rounded-lg bg-slate-100 grid place-items-center text-slate-400">
+ 
+  <img src="https://a1.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEIYvveY*riKqDUvlOVowXF5i9tQ8CZOqsl8tOWATTGjvzmbWhRfmgVffCp6IqrWKskwekXfRJUtYi07o*S3IOOs!/b&ek=1&kp=1&pt=0&bo=4gEkAeIBJAEDFzI!&tl=1&vuin=1786370596&tm=1754899200&dis_t=1754899957&dis_k=47b2e0fd1f8e72e8728299cb08957439&sce=60-4-3&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+ <img src="http://m.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEIYvveY*riKqDUvlOVowXF7q3WhzDikqI2eySq9TE4XREiiAdDM4WSU0kNDZrfzhrO9u.uPlEPoqx.PGtsQlqx0!/b&bo=4gOSAuIDkgIDJwI!&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+                     
+                      </div>
+                      <div class="mt-3 text-right"><button class="btn btn-primary">AI智能分析</button></div>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="flex items-center justify-between">
+                        <div class="font-medium">b. 弹力带下肢抗阻力</div>
+                        <button class="btn btn-soft">查看视频</button>
+                      </div>
+                      <p class="mt-1 text-slate-600">达标率 <b>75%</b>　心率 <b>81–89</b>bpm　血压 <b>130/82</b>、<b>137/88</b>mmHg</p>
+                      <div class="mt-2 grid grid-cols-2 gap-3">
+<div class="aspect-video rounded-lg bg-slate-100 grid place-items-center text-slate-400">
+ <img src="http://m.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEIYvveY*riKqDUvlOVowXF4OaKPWFPgCJbTUgp1tJHQ3z4TL69F5UYF9z0Dd.Tqg4*quqa9*0zZlPAOp5tzkaQg!/b&bo=aAHMAGgBzAADFzI!&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+ <img src="http://m.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEIYvveY*riKqDUvlOVowXF4d*uHIfFOBoFGbUvAl6wNxVoeLA5usOzvgEJ6fWQI7O39OwH3Gd3WKZQEslGOK6Q4!/b&bo=YQFoAWEBaAEDJwI!&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+                        
+                      </div>
+                      <div class="mt-3 text-right"><button class="btn btn-primary">AI智能分析</button></div>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="flex items-center justify-between">
+                        <div class="font-medium">c. 腹式呼吸锻炼小哨笛</div>
+                        <button class="btn btn-soft">查看视频</button>
+                      </div>
+                      <p class="mt-1 text-slate-600">达标率 <b>82%</b>　心率 <b>75–83</b>bpm　血压 <b>133/80</b>、<b>134/82</b>mmHg</p>
+                      <div class="mt-2 grid grid-cols-2 gap-3">
+                      
+<div class="aspect-video rounded-lg bg-slate-100 grid place-items-center text-slate-400">
+ <img src="http://m.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEDjvVzsNMt2kl4pP5WlnqtZOeKaZD5dtu9bh4CUmpigzvBWCfmxO*Jow21oAoY8naPcXho2XJKdS9U975JLU5tE!/b&bo=ngTEB54ExAcDZ0I!&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+ <img src="http://m.qpic.cn/psc?/V51OqGKy0C9hxg3Yv4EQ0aKAt03GgKbI/TmEUgtj9EK6.7V8ajmQrEDjvVzsNMt2kl4pP5WlnqtYZ4mvh37HyhHMIZLU.2nlz3syHEaSqe*TM9R*Np58jOUjkAnfm7cYKE7rriCiB*pA!/b&bo=8QA2AfEANgEDFzI!&rf=viewer_4" alt="关键帧示意图" class="w-full h-full object-cover rounded-lg">
+</div>
+                      </div>
+                      <div class="mt-3 text-right"><button class="btn btn-primary">AI智能分析</button></div>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">出院打卡康复明细</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-4 text-sm">
+                    <div class="flex items-center gap-3">
+                      <span>是否每日锻炼：</span>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="trainDaily" value="是" checked> 是</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="trainDaily" value="否"> 否</label>
+                      <img id="trainSuggestImg" src="https://placehold.co/220x120?text=%E5%BB%BA%E8%AE%AE%E9%94%80%E7%BB%83" class="hidden ml-3 rounded-lg ring-1 ring-slate-200" alt="建议锻炼" />
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <label>锻炼时长：</label>
+                      <input type="number" min="5" step="5" value="20" class="w-20 rounded-lg border border-slate-200 px-2 py-1"> 分钟
+                      <label class="ml-4">时间：</label>
+                      <select class="rounded-lg border border-slate-200 px-2 py-1">
+                        <option>上午</option>
+                        <option selected>下午</option>
+                        <option>晚上</option>
+                      </select>
+                    </div>
+
+                    <div class="grid gap-3">
+                      <div class="rounded-xl border border-slate-200 p-3 flex items-center justify-between">
+                        <div>踝泵运动</div>
+                        <div class="flex items-center gap-2">
+                          <label class="btn btn-soft cursor-pointer">上传视频/拍照上传<input type="file" accept="video/*,image/*" class="hidden"></label>
+                          <button class="btn btn-primary">AI智能分析</button>
+                        </div>
+                      </div>
+                      <div class="rounded-xl border border-slate-200 p-3 flex items-center justify-between">
+                        <div>弹力带下肢抗阻力训练</div>
+                        <div class="flex items-center gap-2">
+                          <label class="btn btn-soft cursor-pointer">上传视频/拍照上传<input type="file" accept="video/*,image/*" class="hidden"></label>
+                          <button class="btn btn-primary">AI智能分析</button>
+                        </div>
+                      </div>
+                      <div class="rounded-xl border border-slate-200 p-3 flex items-center justify-between">
+                        <div>腹式呼吸锻炼小哨笛</div>
+                        <div class="flex items-center gap-2">
+                          <label class="btn btn-soft cursor-pointer">上传视频/拍照上传<input type="file" accept="video/*,image/*" class="hidden"></label>
+                          <button class="btn btn-primary">AI智能分析</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">康复评估</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="grid grid-cols-1 gap-3">
+                      <div class="card p-3">
+                        <canvas id="radarChart" height="160"></canvas>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <label>线下评估(月度)：</label>
+                      <input type="month" class="rounded-lg border border-slate-200 px-2 py-1" />
+                      <input type="number" placeholder="综合评分(0-100)" class="rounded-lg border border-slate-200 px-2 py-1" />
+                      <button class="btn btn-soft">记录</button>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">生命体征监测</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="flex items-center gap-3">
+                      <span>是否测量：</span>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="vital" value="是" checked> 是</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="vital" value="否"> 否</label>
+                      <img id="vitalSuggestImg" src="https://placehold.co/220x120?text=%E5%BB%BA%E8%AE%AE%E7%9B%91%E6%B5%8B%E7%94%9F%E5%91%BD%E4%BD%93%E5%BE%81" class="hidden ml-3 rounded-lg ring-1 ring-slate-200" alt="建议监测生命体征" />
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                      <label class="flex items-center gap-2">呼吸 <input id="resp" type="number" class="w-24 rounded-lg border border-slate-200 px-2 py-1"> 次/分</label>
+                      <label class="flex items-center gap-2">脉搏 <input id="pulse" type="number" class="w-24 rounded-lg border border-slate-200 px-2 py-1"> 次/分</label>
+                      <label class="flex items-center gap-2">血压 <input id="sbp" type="number" class="w-24 rounded-lg border border-slate-200 px-2 py-1" placeholder="收缩压"> / <input id="dbp" type="number" class="w-24 rounded-lg border border-slate-200 px-2 py-1" placeholder="舒张压"> mmHg</label>
+                    </div>
+                    <div class="card p-3">
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="text-sm text-slate-500">生命体征趋势</div>
+                        <div class="flex items-center gap-2 text-xs">
+                          <button class="btn btn-soft vital-range" data-range="day">日</button>
+                          <button class="btn btn-soft vital-range" data-range="week">周</button>
+                          <button class="btn btn-soft vital-range" data-range="month">月</button>
+                        </div>
+                      </div>
+                      <canvas id="vitalChart" height="140"></canvas>
+                    </div>
+                    <div class="text-right"><button class="btn btn-primary" id="btnVitalAI">AI智能分析</button></div>
+                    <p id="vitalAIResult" class="hidden text-sm"></p>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">用药情况</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="flex items-center gap-3">
+                      <span>是否按时服药：</span>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="med" value="是" checked> 是</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="med" value="否"> 否</label>
+                      <img id="medSuggestImg" src="https://placehold.co/220x120?text=%E6%8F%90%E7%A4%BA%E6%8C%89%E6%97%B6%E6%9C%8D%E8%8D%AF" class="hidden ml-3 rounded-lg ring-1 ring-slate-200" alt="建议按时服药" />
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <label class="flex items-center gap-2">日期时间 <input type="datetime-local" class="rounded-lg border border-slate-200 px-2 py-1" value="2025-08-08T18:00" /></label>
+                      <label class="flex items-center gap-2">用药名称 <input type="text" class="rounded-lg border border-slate-200 px-2 py-1" value="厄贝沙坦" /></label>
+                      <label class="flex items-center gap-2">用药量 <select class="rounded-lg border border-slate-200 px-2 py-1"><option>一颗</option><option>两颗</option></select></label>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">睡眠情况</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                      <label class="flex items-center gap-2">日期 <input type="date" class="rounded-lg border border-slate-200 px-2 py-1"></label>
+                      <label class="flex items-center gap-2">睡眠时长 <input id="sleepHour" type="number" step="0.5" value="7.5" class="w-24 rounded-lg border border-slate-200 px-2 py-1"> 小时</label>
+                      <button class="btn btn-soft">记录</button>
+                    </div>
+                    <div class="card p-3">
+                      <div class="flex items-center justify-between mb-2"><div class="text-sm text-slate-500">睡眠趋势</div>
+                        <div class="flex items-center gap-2 text-xs">
+                          <button class="btn btn-soft sleep-range" data-range="day">日</button>
+                          <button class="btn btn-soft sleep-range" data-range="week">周</button>
+                          <button class="btn btn-soft sleep-range" data-range="month">月</button>
+                        </div>
+                      </div>
+                      <canvas id="sleepChart" height="140"></canvas>
+                    </div>
+                    <div class="text-right"><button class="btn btn-primary" id="btnSleepAI">AI智能分析</button></div>
+                    <p id="sleepAIResult" class="hidden text-sm"></p>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">饮食情况</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="flex items-center gap-3">
+                      <span>是否按时吃饭：</span>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="diet" value="是" checked> 是</label>
+                      <label class="inline-flex items-center gap-1"><input type="radio" name="diet" value="否"> 否</label>
+                      <img id="dietSuggestImg" src="https://placehold.co/220x120?text=%E5%BB%BA%E8%AE%AE%E6%8C%89%E6%97%B6%E9%A5%AE%E9%A3%9F" class="hidden ml-3 rounded-lg ring-1 ring-slate-200" alt="建议按时吃饭" />
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label class="flex items-center gap-2">早餐 <input type="text" class="rounded-lg border border-slate-200 px-2 py-1" placeholder="示例：燕麦牛奶"></label>
+                      <label class="flex items-center gap-2">中餐 <input type="text" class="rounded-lg border border-slate-200 px-2 py-1" placeholder="示例：清蒸鱼+蔬菜"></label>
+                      <label class="flex items-center gap-2">晚餐 <input type="text" class="rounded-lg border border-slate-200 px-2 py-1" placeholder="示例：杂粮饭"></label>
+                    </div>
+                    <div class="text-right"><button class="btn btn-primary" id="btnDietAI">AI智能分析</button></div>
+                    <p id="dietAIResult" class="hidden text-sm"></p>
+                  </div>
+                </details>
+
+                <details class="group p-4">
+                  <summary class="flex cursor-pointer items-center justify-between">
+                    <span class="font-medium">随访记录</span>
+                    <span class="text-xs text-slate-400 group-open:rotate-180 transition">⌃</span>
+                  </summary>
+                  <div class="mt-3 space-y-3 text-sm">
+                    <div class="flex items-center gap-2">
+                      <input id="followTime" type="time" class="rounded-lg border border-slate-200 px-2 py-1" value="14:30">
+                      <input id="followText" type="text" class="flex-1 rounded-lg border border-slate-200 px-3 py-2" placeholder="输入随访记录，如：电话随访，右侧肩痛，已调整明日训练强度…">
+                      <label class="btn btn-soft cursor-pointer">上传语音<input type="file" accept="audio/*" class="hidden"></label>
+                      <label class="btn btn-soft cursor-pointer">上传照片<input type="file" accept="image/*" class="hidden"></label>
+                      <button class="btn btn-primary" id="btnAddFollow">添加</button>
+                    </div>
+                    <div class="card p-3 max-h-48 overflow-auto scrollbar-thin" id="followList"></div>
+                  </div>
+                </details>
+
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 头像点击：发病详情弹窗 -->
+  <div id="modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+    <div class="card w-full max-w-lg p-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold">发病详情</h3>
+        <button class="btn btn-soft" id="modalClose">关闭</button>
+      </div>
+      <div id="modalBody" class="mt-3 text-sm space-y-2"></div>
+    </div>
+  </div>
+
+  <script>
+    // ======= Mock 数据 =======
+    const patients = [
+      {id:1, name:'张建国', age:62, type:'缺血性脑梗', avatar:'https://img1.baidu.com/it/u=2317818478,3940283167&fm=253&app=138&f=JPEG?w=800&h=1458', last:'10:23',
+        progress:{morning:true, noon:true, night:true, inProgress:null},
+        exceptions:['💓'], lesion:'左侧大脑中动脉区', muscle:'上肢4级 下肢4级',
+        focusTag:'连续2天未打卡'},
+      {id:2, name:'李梅', age:58, type:'缺血性脑梗', avatar:'https://img1.baidu.com/it/u=1314308307,914014156&fm=253&fmt=auto&app=138&f=JPEG?w=570&h=380', last:'09:12',
+        progress:{morning:true, noon:false, night:false, inProgress:'下午(3/5)'}, exceptions:['⚠️'], lesion:'右侧小脑半球', muscle:'上肢3级 下肢4级', focusTag:'连续2天未打卡'},
+      {id:3, name:'王强', age:65, type:'出血性脑卒中', avatar:'https://bpic.wotucdn.com//original/33/74/62/33746212-33ea7b264773faa40107a024ba2fd2a5.png!/quality/91/unsharp/true/compress/true/watermark/url/bG9nby53YXRlci52OC5wbmc=/align/center/rotate/auto/fw/320', last:'—',
+        progress:{morning:false, noon:false, night:false, inProgress:null}, exceptions:['📊'], lesion:'基底节区出血', muscle:'上肢3级 下肢3级', focusTag:'连续2天未打卡'},
+      {id:4, name:'赵代秀', age:60, type:'缺血性脑梗', avatar:'https://bpic.wotucdn.com//original/33/74/60/33746051-5883a3811418ed70145f895f7ddbe787.png!/quality/91/unsharp/true/compress/true/watermark/url/bG9nby53YXRlci52OC5wbmc=/align/center/rotate/auto/fw/320', last:'08:05',
+        progress:{morning:true, noon:true, night:false, inProgress:null}, exceptions:[], lesion:'脑干', muscle:'上肢5级 下肢4级', focusTag:'连续2天未打卡'},
+      {id:5, name:'陈中华', age:55, type:'缺血性脑梗', avatar:'https://randomuser.me/api/portraits/men/15.jpg', last:'—',
+        progress:{morning:false, noon:false, night:false, inProgress:null}, exceptions:['⚠️','📊'], lesion:'顶叶皮层', muscle:'上肢4级 下肢3级', focusTag:'连续2天未打卡'},
+      {id:6, name:'刘敏芳', age:52, type:'出血性脑卒中', avatar:'https://img2.baidu.com/it/u=1185840822,2159383008&fm=253&fmt=auto&app=138&f=JPEG?w=570&h=380', last:'11:20',
+        progress:{morning:true, noon:true, night:true, inProgress:null}, exceptions:[], lesion:'额叶皮层', muscle:'上肢5级 下肢5级', focusTag:'达标率骤降'},
+      {id:7, name:'周勇', age:67, type:'缺血性脑梗', avatar:'https://img2.baidu.com/it/u=4183070901,847061650&fm=253&app=138&f=JPEG?w=800&h=1422', last:'07:50',
+        progress:{morning:true, noon:true, night:true, inProgress:null}, exceptions:['💓'], lesion:'丘脑', muscle:'上肢4级 下肢4级', focusTag:'每日打卡'},
+      {id:8, name:'孙德花', age:59, type:'缺血性脑梗', avatar:'https://img1.baidu.com/it/u=3292755124,2188512369&fm=253&app=138&f=JPEG?w=800&h=1422g', last:'—',
+        progress:{morning:false, noon:false, night:false, inProgress:null}, exceptions:['📊'], lesion:'枕叶皮层', muscle:'上肢3级 下肢3级', focusTag:'一天未打卡'},
+    ];
+
+    // 核心指标
+    const metrics = { active: 86, total: 120, checkin: 78, alerts:{red:3, yellow:5}, week:['周一','周二','周三','周四','周五','周六','周日'], values:[62,70,68,75,78,80,79] };
+
+    // ======= 初始化渲染 =======
+    const el = (sel)=>document.querySelector(sel);
+    const elAll = (sel)=>Array.from(document.querySelectorAll(sel));
+
+    function renderDashboard(){
+      el('#metricActive').textContent = metrics.active;
+      el('#metricTotal').textContent = metrics.total;
+      el('#metricCheckin').textContent = metrics.checkin + '%';
+      el('#progressCheckin').style.width = metrics.checkin + '%';
+      el('#alertRed').textContent = metrics.alerts.red;
+      el('#alertYellow').textContent = metrics.alerts.yellow;
+      el('#trendWeek').textContent = '本周';
+
+      const ctx = document.getElementById('weeklyChart');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: metrics.week,
+          datasets: [{
+            label: '达标率(%)', data: metrics.values, tension: 0.35, fill: false,
+            borderWidth: 2, pointRadius: 3
+          }]
+        },
+        options: { responsive: true, plugins:{legend:{display:false}}, scales:{ y:{ suggestedMin: 40, suggestedMax: 100 } } }
+      });
+    }
+
+    function progressBarHTML(p){
+      // Build a compact colored strip: green for done, amber for inProgress, red for not started
+      const seg = (color, w)=>`<div class="h-2 ${color}" style="width:${w}%"></div>`;
+      const total = 3; // morning noon night
+      const done = (p.morning?1:0) + (p.noon?1:0) + (p.night?1:0);
+      const inProg = p.inProgress?1:0;
+      const none = Math.max(total - done - inProg, 0);
+      let html = '<div class="progress flex">';
+      if(done>0) html += seg('bg-green-500', done/total*100);
+      if(inProg>0) html += seg('bg-amber-400', inProg/total*100);
+      if(none>0) html += seg('bg-rose-400', none/total*100);
+      html += '</div>';
+      const labels = [];
+      if(p.morning) labels.push('上午训练√'); else if(!p.inProgress) labels.push('上午未开始');
+      if(p.noon===true) labels.push('下午训练√');
+      if(p.night===true) labels.push('晚上训练√');
+      if(p.inProgress) labels.push(`${p.inProgress} 中`);
+      return `${html}<div class="mt-1 text-xs text-slate-500">${labels.join('　')}</div>`;
+    }
+
+    function renderTable(filterName='', filterType=''){
+      const tbody = el('#patientTable');
+      tbody.innerHTML = '';
+      patients
+        .filter(p=>p.name.includes(filterName))
+        .filter(p=>!filterType || p.type===filterType)
+        .forEach(p=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3">
+                <img src="${p.avatar}" alt="${p.name}" class="h-10 w-10 rounded-full ring-2 ring-white shadow cursor-pointer" data-avatar="${p.id}">
+                <div>
+                  <div class="font-medium text-slate-800 hover:text-indigo-600 cursor-pointer" data-detail="${p.id}">${p.name}</div>
+                  <div class="text-xs text-slate-500">${p.age} 岁　<span class="badge bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">${p.type}</span></div>
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3">${progressBarHTML(p.progress)}</td>
+            <td class="px-4 py-3 text-slate-600">${p.last}</td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2 text-lg">${p.exceptions.map(e=>`<span title="异常">${e}</span>`).join('')}</div>
+            </td>`;
+          tbody.appendChild(tr);
+        });
+
+      // Bind avatar -> modal
+      elAll('[data-avatar]').forEach(img=>{
+        img.addEventListener('click', e=>{
+          const id = Number(e.currentTarget.getAttribute('data-avatar'));
+          const p = patients.find(x=>x.id===id);
+          openModal(`<div class='space-y-1'>
+            <div><b>姓名：</b>${p.name}</div>
+            <div><b>病灶位置：</b>${p.lesion}</div>
+            <div><b>肌力等级：</b>${p.muscle}</div>
+            <div><b>卒中类型：</b>${p.type}</div>
+          </div>`);
+        })
+      });
+
+      // Bind name -> detail
+      elAll('[data-detail]').forEach(a=>{
+        a.addEventListener('click', e=>{
+          const id = Number(e.currentTarget.getAttribute('data-detail'));
+          openDetail(id);
+        })
+      });
+    }
+
+    function renderFocus(){
+      const list = el('#focusList');
+      list.innerHTML = '';
+      // 前5：连续2天未打卡；后3：达标率骤降/每日打卡/一天未打卡
+      const sorted = [
+        ...patients.filter(p=>p.focusTag==='连续2天未打卡'),
+        ...patients.filter(p=>p.focusTag!=='连续2天未打卡')
+      ].slice(0,8);
+      sorted.forEach(p=>{
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <div class="flex items-center gap-3 rounded-xl p-2 hover:bg-slate-50">
+            <img src="${p.avatar}" class="h-9 w-9 rounded-full ring-1 ring-slate-200 cursor-pointer" data-avatar="${p.id}" alt="${p.name}">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between">
+                <a class="truncate hover:text-indigo-600 cursor-pointer" data-detail="${p.id}">${p.name}</a>
+                <span class="text-xs text-slate-500">${p.last||'—'}</span>
+              </div>
+              <div class="text-xs text-amber-600">${p.focusTag}</div>
+            </div>
+          </div>`;
+        list.appendChild(li);
+      });
+      el('#focusCount').textContent = 8;
+
+      // rebind events
+      elAll('[data-detail]').forEach(a=>a.addEventListener('click', e=>{
+        const id = Number(e.currentTarget.getAttribute('data-detail'));
+        openDetail(id);
+      }));
+      elAll('[data-avatar]').forEach(img=>img.addEventListener('click', e=>{
+        const id = Number(e.currentTarget.getAttribute('data-avatar'));
+        const p = patients.find(x=>x.id===id);
+        openModal(`<div class='space-y-1'>
+          <div><b>姓名：</b>${p.name}</div>
+          <div><b>病灶位置：</b>${p.lesion}</div>
+          <div><b>肌力等级：</b>${p.muscle}</div>
+          <div><b>卒中类型：</b>${p.type}</div>
+        </div>`);
+      }));
+    }
+
+    // ======= 详情页 =======
+    function openDetail(id){
+      const p = patients.find(x=>x.id===id);
+      if(!p) return;
+      // header
+      el('#detailName').textContent = `${p.name}（${p.age}岁）`;
+      el('#detailSub').textContent = `${p.type} · 病灶：${p.lesion} · 肌力：${p.muscle}`;
+
+      // calendar mock (入院第1天…)
+      renderCalendar('week');
+
+      // show section
+      el('#sectionOverview').classList.add('hidden');
+      el('#sectionPatients').classList.add('hidden');
+      el('#sectionDetail').classList.remove('hidden');
+      window.scrollTo({top:0,behavior:'smooth'});
+
+      // Radar chart
+      const radar = document.getElementById('radarChart');
+      if(radar._chart) radar._chart.destroy();
+      radar._chart = new Chart(radar, {
+        type: 'radar',
+        data: { labels:['肢体功能','言语能力','平衡协调','日常生活','记忆注意','情绪状态'], datasets:[{ data:[65, 58, 62, 70, 55, 60], borderWidth:2, pointRadius:2 }]},
+        options: { plugins:{legend:{display:false}}, scales:{ r:{ suggestedMin:0, suggestedMax:100 }}}
+      });
+
+      // Vital chart
+      const vital = document.getElementById('vitalChart');
+      if(vital._chart) vital._chart.destroy();
+      vital._chart = new Chart(vital, {
+        type: 'line',
+        data: { labels: Array.from({length:7}, (_,i)=>`D${i+1}`), datasets:[{label:'心率', data:[80,84,82,88,90,86,85], borderWidth:2, pointRadius:2},{label:'呼吸', data:[18,19,18,20,19,18,17], borderWidth:2, pointRadius:2}]},
+        options: { plugins:{legend:{position:'bottom'}}, scales:{ y:{ beginAtZero:false }}}
+      });
+
+      // Sleep chart
+      const sleep = document.getElementById('sleepChart');
+      if(sleep._chart) sleep._chart.destroy();
+      sleep._chart = new Chart(sleep, {
+        type: 'line',
+        data: { labels: Array.from({length:7}, (_,i)=>`D${i+1}`), datasets:[{label:'睡眠时长(h)', data:[7.5,6.0,6.5,7.0,8.0,7.2,7.6], borderWidth:2, pointRadius:2}]},
+        options: { plugins:{legend:{position:'bottom'}}, scales:{ y:{ suggestedMin:4, suggestedMax:10 }}}
+      });
+
+      // bind toggles
+      elAll('[data-view]').forEach(btn=>btn.onclick=(e)=>{
+        renderCalendar(e.currentTarget.getAttribute('data-view'))
+      });
+    }
+
+    function renderCalendar(view){
+      const grid = el('#calendarGrid');
+      grid.innerHTML = '';
+      const count = view==='week'?7:28;
+      for(let i=1;i<=count;i++){
+        const finished = Math.random()>0.3;
+        const rate = Math.floor(60 + Math.random()*40);
+        const cell = document.createElement('div');
+        cell.className = `rounded-xl p-2 border text-xs ${finished? 'border-green-200 bg-green-50 text-green-700':'border-rose-200 bg-rose-50 text-rose-700'}`;
+        cell.innerHTML = `<div class="font-medium">入院第${i}天</div><div>${finished?`完成率 ${rate}%`:'未完成'}</div>`;
+        grid.appendChild(cell);
+      }
+    }
+
+    // Vital & Sleep range buttons
+    elAll('.vital-range').forEach(b=>b.addEventListener('click', ()=>{
+      const vital = document.getElementById('vitalChart');
+      const len = b.dataset.range==='day'? 24 : (b.dataset.range==='week'? 7 : 30);
+      vital._chart.data.labels = Array.from({length:len}, (_,i)=> (b.dataset.range==='day'? `${i}:00` : `D${i+1}`));
+      vital._chart.data.datasets[0].data = Array.from({length:len}, ()=> 75+Math.round(Math.random()*20));
+      vital._chart.data.datasets[1].data = Array.from({length:len}, ()=> 16+Math.round(Math.random()*6));
+      vital._chart.update();
+    }));
+    elAll('.sleep-range').forEach(b=>b.addEventListener('click', ()=>{
+      const sleep = document.getElementById('sleepChart');
+      const len = b.dataset.range==='day'? 24 : (b.dataset.range==='week'? 7 : 30);
+      sleep._chart.data.labels = Array.from({length:len}, (_,i)=> (b.dataset.range==='day'? `${i}:00` : `D${i+1}`));
+      sleep._chart.data.datasets[0].data = Array.from({length:len}, ()=> (6 + Math.random()*3).toFixed(1));
+      sleep._chart.update();
+    }));
+
+    // AI 分析按钮（伪示例）
+    el('#btnVitalAI').addEventListener('click', ()=>{
+      const bpm = document.getElementById('pulse').value || 82;
+      const sbp = document.getElementById('sbp').value || 130;
+      const dbp = document.getElementById('dbp').value || 82;
+      const risk = (bpm>100 || sbp>140 || dbp>90);
+      const p = el('#vitalAIResult');
+      p.classList.remove('hidden');
+      p.innerHTML = risk ? '<span class="text-rose-600">AI提示：心率/血压可能偏高，建议减量训练并复测。</span>' : '<span class="text-green-600">AI提示：生命体征基本稳定。</span>';
+    });
+    el('#btnSleepAI').addEventListener('click', ()=>{
+      const h = parseFloat(document.getElementById('sleepHour').value||7);
+      const p = el('#sleepAIResult');
+      p.classList.remove('hidden');
+      p.innerHTML = (h<6? '<span class="text-amber-600">AI提示：睡眠不足，建议下午训练强度下调。</span>' : '<span class="text-green-600">AI提示：睡眠良好，维持当前节律。</span>');
+    });
+    el('#btnDietAI').addEventListener('click', ()=>{
+      const p = el('#dietAIResult');
+      p.classList.remove('hidden');
+      p.innerHTML = '<span class="text-slate-700">AI提示：蛋白质适中，建议增加蔬果与膳食纤维以优化营养结构。</span>';
+    });
+
+    // 观察：单选切换显示建议图
+    elAll('input[name="trainDaily"]').forEach(r=>r.addEventListener('change', ()=>{
+      el('#trainSuggestImg').classList.toggle('hidden', r.value!=='否' || !r.checked);
+    }));
+    elAll('input[name="vital"]').forEach(r=>r.addEventListener('change', ()=>{
+      el('#vitalSuggestImg').classList.toggle('hidden', r.value!=='否' || !r.checked);
+    }));
+    elAll('input[name="med"]').forEach(r=>r.addEventListener('change', ()=>{
+      el('#medSuggestImg').classList.toggle('hidden', r.value!=='否' || !r.checked);
+    }));
+    elAll('input[name="diet"]').forEach(r=>r.addEventListener('change', ()=>{
+      el('#dietSuggestImg').classList.toggle('hidden', r.value!=='否' || !r.checked);
+    }));
+
+    // 穿刺点：异常联动
+    elAll('input[name="bleed"]').forEach(r=>r.addEventListener('change', ()=>{
+      const isYes = r.value==='是' && r.checked;
+      el('#bleedTime').classList.toggle('hidden', !isYes);
+      el('#bleedWarn').classList.toggle('hidden', !isYes);
+    }));
+    el('#skinTemp').addEventListener('input', (e)=>{
+      const t = parseFloat(e.target.value);
+      el('#tempWarn').classList.toggle('hidden', !(t && (t<32 || t>37.5)));
+    });
+
+    // 随访记录
+    el('#btnAddFollow').addEventListener('click', ()=>{
+      const list = el('#followList');
+      const time = el('#followTime').value || '—';
+      const text = el('#followText').value.trim();
+      if(!text) return;
+      const item = document.createElement('div');
+      const date = new Date();
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${time}`;
+      item.className = 'flex items-start gap-2 py-1';
+      item.innerHTML = `<div class="status-dot" style="background:#6366f1"></div><div><div class="text-xs text-slate-500">${dateStr}</div><div>${text}</div></div>`;
+      list.prepend(item);
+      el('#followText').value = '';
+    });
+
+    // 搜索过滤
+    el('#searchInput').addEventListener('input', (e)=>{
+      renderTable(e.target.value.trim(), el('#filterType').value)
+    });
+    el('#filterType').addEventListener('change', (e)=>{
+      renderTable(el('#searchInput').value.trim(), e.target.value)
+    });
+
+    // 简单导航
+    el('#btnToOverview').onclick=()=>{
+      el('#sectionOverview').classList.remove('hidden');
+      el('#sectionPatients').classList.remove('hidden');
+      el('#sectionDetail').classList.add('hidden');
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    el('#btnToPatients').onclick=()=>{
+      el('#sectionOverview').classList.add('hidden');
+      el('#sectionPatients').classList.remove('hidden');
+      el('#sectionDetail').classList.add('hidden');
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    el('#btnBack').onclick=()=>{
+      el('#btnToPatients').click();
+    }
+
+    // 模态框
+    function openModal(html){
+      el('#modalBody').innerHTML = html;
+      el('#modal').classList.remove('hidden');
+      el('#modal').classList.add('flex');
+    }
+    el('#modalClose').addEventListener('click', ()=>{
+      el('#modal').classList.add('hidden');
+      el('#modal').classList.remove('flex');
+    });
+    el('#modal').addEventListener('click', (e)=>{
+      if(e.target.id==='modal') el('#modalClose').click();
+    });
+
+    // 启动渲染
+    renderDashboard();
+    renderFocus();
+    renderTable();
+  </script>
+</body>
+</html>
